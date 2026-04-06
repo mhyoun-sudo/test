@@ -3,7 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#1565C0">
     <title>Gemma 챗봇</title>
+    <link rel="manifest" href="manifest.json">
     <style>
         :root {
             --primary: #1565C0;
@@ -14,8 +19,6 @@
             --text-secondary: #757575;
             --user-bubble: #1565C0;
             --bot-bubble: #E8EAF6;
-            --error: #D32F2F;
-            --success: #4CAF50;
         }
 
         @media (prefers-color-scheme: dark) {
@@ -30,27 +33,22 @@
             }
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: var(--bg);
             color: var(--text);
-            height: 100vh;
+            height: 100dvh;
             display: flex;
             flex-direction: column;
             overflow: hidden;
         }
 
-        /* Header */
         .header {
             background: var(--primary);
             color: white;
-            padding: 16px 20px;
+            padding: max(env(safe-area-inset-top), 12px) 20px 12px;
             display: flex;
             align-items: center;
             gap: 12px;
@@ -59,154 +57,188 @@
         }
 
         .header-icon {
-            width: 36px;
-            height: 36px;
+            width: 40px; height: 40px;
             background: rgba(255,255,255,0.2);
             border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 20px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px;
         }
 
-        .header-info h1 {
-            font-size: 17px;
-            font-weight: 600;
+        .header-info h1 { font-size: 18px; font-weight: 600; }
+
+        .header-status { font-size: 12px; opacity: 0.9; }
+
+        .header-actions { margin-left: auto; display: flex; gap: 6px; }
+
+        .header-btn {
+            background: rgba(255,255,255,0.2);
+            border: none; color: white;
+            padding: 8px 12px; border-radius: 8px;
+            font-size: 13px; cursor: pointer;
         }
 
-        .header-status {
-            font-size: 12px;
-            opacity: 0.9;
+        .header-btn:active { background: rgba(255,255,255,0.3); }
+
+        .header-actions { display: flex; gap: 6px; }
+
+        /* Model Selector Modal */
+        .modal-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.5); z-index: 100;
+            align-items: center; justify-content: center;
+            padding: 20px;
         }
+        .modal-overlay.open { display: flex; }
+
+        .modal {
+            background: var(--surface); border-radius: 16px;
+            width: 100%; max-width: 400px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .modal-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(0,0,0,0.08);
+            font-weight: 600; font-size: 17px;
+        }
+
+        .modal-body { padding: 12px; }
+
+        .model-option {
+            display: flex; align-items: center; gap: 12px;
+            padding: 14px 16px; border-radius: 12px;
+            cursor: pointer; border: 2px solid transparent;
+            transition: all 0.15s;
+            margin-bottom: 8px;
+            background: var(--bg);
+        }
+        .model-option:last-child { margin-bottom: 0; }
+        .model-option:hover { border-color: var(--primary); }
+        .model-option.selected { border-color: var(--primary); background: var(--primary-light); }
+        .model-option.active { opacity: 0.6; cursor: default; }
+
+        .model-radio {
+            width: 20px; height: 20px; border-radius: 50%;
+            border: 2px solid var(--text-secondary); flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .model-option.selected .model-radio {
+            border-color: var(--primary);
+        }
+        .model-option.selected .model-radio::after {
+            content: ''; width: 10px; height: 10px;
+            border-radius: 50%; background: var(--primary);
+        }
+
+        .model-info { flex: 1; }
+        .model-name { font-weight: 600; font-size: 15px; }
+        .model-desc { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+        .model-badge {
+            font-size: 11px; padding: 2px 8px;
+            border-radius: 10px; font-weight: 600;
+        }
+        .badge-fast { background: #E8F5E9; color: #2E7D32; }
+        .badge-smart { background: #E3F2FD; color: #1565C0; }
+        .badge-current { background: #FFF3E0; color: #E65100; }
+
+        .modal-footer {
+            padding: 12px 16px;
+            border-top: 1px solid rgba(0,0,0,0.08);
+            display: flex; gap: 8px; justify-content: flex-end;
+        }
+        .modal-footer button {
+            padding: 10px 20px; border-radius: 10px;
+            border: none; font-size: 14px; font-weight: 600; cursor: pointer;
+        }
+        .btn-cancel { background: var(--bg); color: var(--text); }
+        .btn-confirm { background: var(--primary); color: white; }
+        .btn-confirm:disabled { opacity: 0.4; cursor: not-allowed; }
 
         .status-dot {
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            margin-right: 4px;
-            vertical-align: middle;
+            display: inline-block; width: 8px; height: 8px;
+            border-radius: 50%; margin-right: 4px; vertical-align: middle;
         }
-
         .status-dot.loading { background: #FFC107; }
         .status-dot.ready { background: #4CAF50; }
         .status-dot.error { background: #F44336; }
 
-        /* Status Banner */
         .status-banner {
             padding: 16px 20px;
             background: var(--primary-light);
             border-bottom: 1px solid rgba(0,0,0,0.08);
         }
-
-        .status-banner.error {
-            background: #FFEBEE;
-        }
+        .status-banner.error { background: #FFEBEE; }
+        .status-banner.hidden { display: none; }
 
         .progress-bar {
-            width: 100%;
-            height: 6px;
+            width: 100%; height: 6px;
             background: rgba(0,0,0,0.1);
-            border-radius: 3px;
-            margin-top: 10px;
-            overflow: hidden;
+            border-radius: 3px; margin-top: 10px; overflow: hidden;
         }
 
         .progress-fill {
-            height: 100%;
-            background: var(--primary);
-            border-radius: 3px;
-            transition: width 0.3s ease;
+            height: 100%; background: var(--primary);
+            border-radius: 3px; transition: width 0.3s ease;
         }
 
-        .status-text {
-            font-size: 13px;
+        .status-text { font-size: 13px; color: var(--text-secondary); }
+
+        .chat-area {
+            flex: 1; overflow-y: auto;
+            padding: 12px 16px;
+            display: flex; flex-direction: column; gap: 10px;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .welcome {
+            text-align: center; padding: 40px 20px;
             color: var(--text-secondary);
         }
-
-        /* Chat Area */
-        .chat-area {
-            flex: 1;
-            overflow-y: auto;
-            padding: 12px 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            scroll-behavior: smooth;
-        }
+        .welcome-icon { font-size: 48px; margin-bottom: 12px; }
+        .welcome h2 { font-size: 20px; color: var(--text); margin-bottom: 8px; }
+        .welcome p { font-size: 14px; line-height: 1.6; }
 
         .message {
-            display: flex;
-            gap: 8px;
-            max-width: 85%;
+            display: flex; gap: 8px; max-width: 85%;
             animation: fadeIn 0.2s ease;
         }
-
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(8px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
-        .message.user {
-            align-self: flex-end;
-            flex-direction: row-reverse;
-        }
-
-        .message.bot {
-            align-self: flex-start;
-        }
+        .message.user { align-self: flex-end; flex-direction: row-reverse; }
+        .message.bot { align-self: flex-start; }
 
         .avatar {
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            flex-shrink: 0;
+            width: 32px; height: 32px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 15px; flex-shrink: 0;
         }
-
-        .bot .avatar {
-            background: var(--primary);
-            color: white;
-        }
+        .bot .avatar { background: var(--primary); color: white; }
 
         .bubble {
-            padding: 10px 14px;
-            border-radius: 18px;
-            font-size: 15px;
-            line-height: 1.5;
-            word-break: break-word;
-            white-space: pre-wrap;
+            padding: 10px 14px; border-radius: 18px;
+            font-size: 15px; line-height: 1.6;
+            word-break: break-word; white-space: pre-wrap;
         }
-
         .user .bubble {
-            background: var(--user-bubble);
-            color: white;
+            background: var(--user-bubble); color: white;
             border-bottom-right-radius: 4px;
         }
-
         .bot .bubble {
-            background: var(--bot-bubble);
-            color: var(--text);
+            background: var(--bot-bubble); color: var(--text);
             border-bottom-left-radius: 4px;
         }
 
-        .typing-indicator {
-            display: flex;
-            gap: 4px;
-            padding: 12px 16px;
-        }
-
+        .typing-indicator { display: flex; gap: 4px; padding: 12px 16px; }
         .typing-indicator span {
-            width: 8px;
-            height: 8px;
+            width: 8px; height: 8px;
             background: var(--text-secondary);
             border-radius: 50%;
             animation: bounce 1.4s infinite both;
         }
-
         .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
         .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
 
@@ -215,14 +247,11 @@
             40% { transform: scale(1); opacity: 1; }
         }
 
-        /* Input Area */
         .input-area {
-            padding: 10px 12px;
+            padding: 10px 12px max(env(safe-area-inset-bottom), 10px);
             background: var(--surface);
             border-top: 1px solid rgba(0,0,0,0.08);
-            display: flex;
-            gap: 10px;
-            align-items: flex-end;
+            display: flex; gap: 10px; align-items: flex-end;
         }
 
         .input-area textarea {
@@ -230,48 +259,25 @@
             border: 1.5px solid rgba(0,0,0,0.15);
             border-radius: 22px;
             padding: 10px 16px;
-            font-size: 15px;
-            font-family: inherit;
-            resize: none;
-            outline: none;
+            font-size: 16px; font-family: inherit;
+            resize: none; outline: none;
             max-height: 120px;
-            background: var(--bg);
-            color: var(--text);
+            background: var(--bg); color: var(--text);
             line-height: 1.4;
         }
-
-        .input-area textarea:focus {
-            border-color: var(--primary);
-        }
-
-        .input-area textarea:disabled {
-            opacity: 0.5;
-        }
+        .input-area textarea:focus { border-color: var(--primary); }
+        .input-area textarea:disabled { opacity: 0.5; }
 
         .send-btn {
-            width: 44px;
-            height: 44px;
-            border-radius: 50%;
-            border: none;
-            background: var(--primary);
-            color: white;
-            font-size: 20px;
+            width: 44px; height: 44px;
+            border-radius: 50%; border: none;
+            background: var(--primary); color: white;
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-            transition: opacity 0.2s;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0; transition: opacity 0.2s;
         }
-
-        .send-btn:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
-        }
-
-        .send-btn:active:not(:disabled) {
-            transform: scale(0.95);
-        }
+        .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .send-btn:active:not(:disabled) { transform: scale(0.95); }
     </style>
 </head>
 <body>
@@ -280,8 +286,23 @@
         <div class="header-info">
             <h1>Gemma 챗봇</h1>
             <div class="header-status" id="headerStatus">
-                <span class="status-dot loading"></span>
-                초기화 중...
+                <span class="status-dot loading"></span>초기화 중...
+            </div>
+        </div>
+        <div class="header-actions">
+            <button class="header-btn" id="modelBtn" onclick="openModelSelector()">모델 변경</button>
+            <button class="header-btn" onclick="clearChat()">초기화</button>
+        </div>
+    </div>
+
+    <!-- Model Selector Modal -->
+    <div class="modal-overlay" id="modelModal">
+        <div class="modal">
+            <div class="modal-header">모델 선택</div>
+            <div class="modal-body" id="modelList"></div>
+            <div class="modal-footer">
+                <button class="btn-cancel" onclick="closeModelSelector()">취소</button>
+                <button class="btn-confirm" id="modelConfirmBtn" onclick="confirmModelChange()" disabled>변경</button>
             </div>
         </div>
     </div>
@@ -293,15 +314,17 @@
         </div>
     </div>
 
-    <div class="chat-area" id="chatArea"></div>
+    <div class="chat-area" id="chatArea">
+        <div class="welcome" id="welcome">
+            <div class="welcome-icon">🤖</div>
+            <h2>Gemma 챗봇</h2>
+            <p>WebGPU로 기기에서 직접 실행되는 AI 챗봇입니다.<br>
+            모델 로딩이 완료되면 대화를 시작할 수 있습니다.</p>
+        </div>
+    </div>
 
     <div class="input-area">
-        <textarea
-            id="messageInput"
-            rows="1"
-            placeholder="메시지를 입력하세요..."
-            disabled
-        ></textarea>
+        <textarea id="messageInput" rows="1" placeholder="메시지를 입력하세요..." disabled></textarea>
         <button class="send-btn" id="sendBtn" disabled>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                 <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" fill="currentColor"/>
@@ -310,7 +333,7 @@
     </div>
 
     <script type="module">
-        import * as webllm from "https://esm.run/@anthropic-ai/web-llm@latest";
+        import * as webllm from "https://esm.run/@mlc-ai/web-llm@0.2.78";
 
         const chatArea = document.getElementById('chatArea');
         const messageInput = document.getElementById('messageInput');
@@ -319,10 +342,38 @@
         const statusText = document.getElementById('statusText');
         const progressFill = document.getElementById('progressFill');
         const headerStatus = document.getElementById('headerStatus');
+        const welcome = document.getElementById('welcome');
 
         let engine = null;
         let isGenerating = false;
-        const MODEL_ID = "gemma-2-2b-it-q4f16_1-MLC";
+        let conversationHistory = [];
+
+        const MODELS = [
+            {
+                id: "gemma-2-2b-it-q4f16_1-MLC",
+                name: "Gemma 2 2B",
+                desc: "가볍고 빠름 · ~1.5GB · 저사양 기기 권장",
+                badge: "빠름",
+                badgeClass: "badge-fast"
+            },
+            {
+                id: "gemma-2-2b-it-q4f32_1-MLC",
+                name: "Gemma 2 2B (고정밀)",
+                desc: "2B 고정밀 버전 · ~2.5GB · 더 정확한 응답",
+                badge: "정밀",
+                badgeClass: "badge-smart"
+            },
+            {
+                id: "gemma-2-9b-it-q4f16_1-MLC",
+                name: "Gemma 2 9B",
+                desc: "가장 똑똑함 · ~5.5GB · 고사양 기기 필요",
+                badge: "똑똑",
+                badgeClass: "badge-smart"
+            }
+        ];
+
+        let currentModelId = localStorage.getItem('selectedModel') || MODELS[0].id;
+        let pendingModelId = null;
 
         // Auto-resize textarea
         messageInput.addEventListener('input', () => {
@@ -331,7 +382,7 @@
             sendBtn.disabled = !messageInput.value.trim() || isGenerating;
         });
 
-        // Enter to send
+        // Enter to send (shift+enter for newline)
         messageInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -341,7 +392,75 @@
 
         sendBtn.addEventListener('click', sendMessage);
 
+        window.clearChat = function() {
+            conversationHistory = [];
+            chatArea.innerHTML = '';
+            if (engine) {
+                engine.resetChat();
+            }
+        };
+
+        window.openModelSelector = function() {
+            pendingModelId = null;
+            const modelList = document.getElementById('modelList');
+            const confirmBtn = document.getElementById('modelConfirmBtn');
+            confirmBtn.disabled = true;
+
+            modelList.innerHTML = MODELS.map(m => {
+                const isCurrent = m.id === currentModelId;
+                return `
+                    <div class="model-option ${isCurrent ? 'selected active' : ''}"
+                         data-model-id="${m.id}"
+                         onclick="selectModel('${m.id}')">
+                        <div class="model-radio"></div>
+                        <div class="model-info">
+                            <div class="model-name">${m.name}</div>
+                            <div class="model-desc">${m.desc}</div>
+                        </div>
+                        ${isCurrent
+                            ? '<span class="model-badge badge-current">사용 중</span>'
+                            : `<span class="model-badge ${m.badgeClass}">${m.badge}</span>`}
+                    </div>`;
+            }).join('');
+
+            document.getElementById('modelModal').classList.add('open');
+        };
+
+        window.selectModel = function(modelId) {
+            if (modelId === currentModelId) return;
+            pendingModelId = modelId;
+            document.querySelectorAll('.model-option').forEach(el => {
+                el.classList.toggle('selected', el.dataset.modelId === modelId);
+            });
+            document.getElementById('modelConfirmBtn').disabled = false;
+        };
+
+        window.closeModelSelector = function() {
+            document.getElementById('modelModal').classList.remove('open');
+            pendingModelId = null;
+        };
+
+        window.confirmModelChange = async function() {
+            if (!pendingModelId || pendingModelId === currentModelId) return;
+            currentModelId = pendingModelId;
+            localStorage.setItem('selectedModel', currentModelId);
+            closeModelSelector();
+
+            // Reset state
+            conversationHistory = [];
+            chatArea.innerHTML = '';
+            messageInput.disabled = true;
+            sendBtn.disabled = true;
+
+            if (engine) {
+                engine = null;
+            }
+
+            initEngine();
+        };
+
         function addMessage(text, isUser) {
+            if (welcome) welcome.style.display = 'none';
             const div = document.createElement('div');
             div.className = `message ${isUser ? 'user' : 'bot'}`;
             div.innerHTML = `
@@ -354,6 +473,7 @@
         }
 
         function addStreamingMessage() {
+            if (welcome) welcome.style.display = 'none';
             const div = document.createElement('div');
             div.className = 'message bot';
             div.innerHTML = `
@@ -387,13 +507,14 @@
             isGenerating = true;
 
             addMessage(text, true);
+            conversationHistory.push({ role: "user", content: text });
 
             const botDiv = addStreamingMessage();
             let fullResponse = '';
 
             try {
                 const chunks = await engine.chat.completions.create({
-                    messages: [{ role: "user", content: text }],
+                    messages: conversationHistory,
                     stream: true,
                     max_tokens: 1024,
                     temperature: 0.7,
@@ -406,8 +527,12 @@
                 }
 
                 if (!fullResponse.trim()) {
-                    updateStreamingMessage(botDiv, '(응답 없음)');
+                    fullResponse = '(응답 없음)';
+                    updateStreamingMessage(botDiv, fullResponse);
                 }
+
+                conversationHistory.push({ role: "assistant", content: fullResponse });
+
             } catch (err) {
                 console.error('Generation error:', err);
                 updateStreamingMessage(botDiv, `오류: ${err.message}`);
@@ -415,22 +540,33 @@
 
             isGenerating = false;
             sendBtn.disabled = !messageInput.value.trim();
+            messageInput.focus();
+        }
+
+        function getModelInfo(modelId) {
+            return MODELS.find(m => m.id === modelId) || MODELS[0];
         }
 
         async function initEngine() {
-            // Check WebGPU support
             if (!navigator.gpu) {
                 statusBanner.classList.add('error');
-                statusText.textContent = '이 기기/브라우저에서 WebGPU를 지원하지 않습니다. Chrome 121 이상이 필요합니다.';
+                statusBanner.classList.remove('hidden');
+                statusText.innerHTML = '이 브라우저에서 WebGPU를 지원하지 않습니다.<br><b>Chrome 121 이상</b>에서 열어주세요.';
                 progressFill.style.width = '0%';
                 headerStatus.innerHTML = '<span class="status-dot error"></span>WebGPU 미지원';
                 return;
             }
 
-            try {
-                statusText.textContent = 'Gemma 2 2B 모델을 다운로드하고 있습니다... (최초 1회)';
+            const modelInfo = getModelInfo(currentModelId);
 
-                engine = await webllm.CreateMLCEngine(MODEL_ID, {
+            statusBanner.classList.remove('hidden', 'error');
+            progressFill.style.width = '0%';
+            headerStatus.innerHTML = `<span class="status-dot loading"></span>${modelInfo.name} 로딩 중...`;
+
+            try {
+                statusText.textContent = `${modelInfo.name} 모델을 다운로드하고 있습니다... (최초 1회)`;
+
+                engine = await webllm.CreateMLCEngine(currentModelId, {
                     initProgressCallback: (report) => {
                         const pct = Math.round(report.progress * 100);
                         progressFill.style.width = pct + '%';
@@ -438,16 +574,14 @@
                     }
                 });
 
-                // Ready
-                statusBanner.style.display = 'none';
-                headerStatus.innerHTML = '<span class="status-dot ready"></span>온라인 (WebGPU)';
+                statusBanner.classList.add('hidden');
+                headerStatus.innerHTML = `<span class="status-dot ready"></span>${modelInfo.name} (WebGPU)`;
                 messageInput.disabled = false;
                 messageInput.focus();
 
-                addMessage('안녕하세요! Gemma 챗봇입니다. WebGPU로 기기에서 직접 실행됩니다. 무엇이든 물어보세요!', false);
-
             } catch (err) {
                 console.error('Init error:', err);
+                statusBanner.classList.remove('hidden');
                 statusBanner.classList.add('error');
                 statusText.textContent = `모델 로드 실패: ${err.message}`;
                 headerStatus.innerHTML = '<span class="status-dot error"></span>오류 발생';

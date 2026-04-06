@@ -68,16 +68,92 @@
 
         .header-status { font-size: 12px; opacity: 0.9; }
 
-        .header-actions { margin-left: auto; }
+        .header-actions { margin-left: auto; display: flex; gap: 6px; }
 
-        .clear-btn {
+        .header-btn {
             background: rgba(255,255,255,0.2);
             border: none; color: white;
             padding: 8px 12px; border-radius: 8px;
             font-size: 13px; cursor: pointer;
         }
 
-        .clear-btn:active { background: rgba(255,255,255,0.3); }
+        .header-btn:active { background: rgba(255,255,255,0.3); }
+
+        .header-actions { display: flex; gap: 6px; }
+
+        /* Model Selector Modal */
+        .modal-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.5); z-index: 100;
+            align-items: center; justify-content: center;
+            padding: 20px;
+        }
+        .modal-overlay.open { display: flex; }
+
+        .modal {
+            background: var(--surface); border-radius: 16px;
+            width: 100%; max-width: 400px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .modal-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(0,0,0,0.08);
+            font-weight: 600; font-size: 17px;
+        }
+
+        .modal-body { padding: 12px; }
+
+        .model-option {
+            display: flex; align-items: center; gap: 12px;
+            padding: 14px 16px; border-radius: 12px;
+            cursor: pointer; border: 2px solid transparent;
+            transition: all 0.15s;
+            margin-bottom: 8px;
+            background: var(--bg);
+        }
+        .model-option:last-child { margin-bottom: 0; }
+        .model-option:hover { border-color: var(--primary); }
+        .model-option.selected { border-color: var(--primary); background: var(--primary-light); }
+        .model-option.active { opacity: 0.6; cursor: default; }
+
+        .model-radio {
+            width: 20px; height: 20px; border-radius: 50%;
+            border: 2px solid var(--text-secondary); flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .model-option.selected .model-radio {
+            border-color: var(--primary);
+        }
+        .model-option.selected .model-radio::after {
+            content: ''; width: 10px; height: 10px;
+            border-radius: 50%; background: var(--primary);
+        }
+
+        .model-info { flex: 1; }
+        .model-name { font-weight: 600; font-size: 15px; }
+        .model-desc { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+        .model-badge {
+            font-size: 11px; padding: 2px 8px;
+            border-radius: 10px; font-weight: 600;
+        }
+        .badge-fast { background: #E8F5E9; color: #2E7D32; }
+        .badge-smart { background: #E3F2FD; color: #1565C0; }
+        .badge-current { background: #FFF3E0; color: #E65100; }
+
+        .modal-footer {
+            padding: 12px 16px;
+            border-top: 1px solid rgba(0,0,0,0.08);
+            display: flex; gap: 8px; justify-content: flex-end;
+        }
+        .modal-footer button {
+            padding: 10px 20px; border-radius: 10px;
+            border: none; font-size: 14px; font-weight: 600; cursor: pointer;
+        }
+        .btn-cancel { background: var(--bg); color: var(--text); }
+        .btn-confirm { background: var(--primary); color: white; }
+        .btn-confirm:disabled { opacity: 0.4; cursor: not-allowed; }
 
         .status-dot {
             display: inline-block; width: 8px; height: 8px;
@@ -214,7 +290,20 @@
             </div>
         </div>
         <div class="header-actions">
-            <button class="clear-btn" id="clearBtn" onclick="clearChat()">대화 초기화</button>
+            <button class="header-btn" id="modelBtn" onclick="openModelSelector()">모델 변경</button>
+            <button class="header-btn" onclick="clearChat()">초기화</button>
+        </div>
+    </div>
+
+    <!-- Model Selector Modal -->
+    <div class="modal-overlay" id="modelModal">
+        <div class="modal">
+            <div class="modal-header">모델 선택</div>
+            <div class="modal-body" id="modelList"></div>
+            <div class="modal-footer">
+                <button class="btn-cancel" onclick="closeModelSelector()">취소</button>
+                <button class="btn-confirm" id="modelConfirmBtn" onclick="confirmModelChange()" disabled>변경</button>
+            </div>
         </div>
     </div>
 
@@ -258,7 +347,33 @@
         let engine = null;
         let isGenerating = false;
         let conversationHistory = [];
-        const MODEL_ID = "gemma-2-2b-it-q4f16_1-MLC";
+
+        const MODELS = [
+            {
+                id: "gemma-2-2b-it-q4f16_1-MLC",
+                name: "Gemma 2 2B",
+                desc: "가볍고 빠름 · ~1.5GB · 저사양 기기 권장",
+                badge: "빠름",
+                badgeClass: "badge-fast"
+            },
+            {
+                id: "gemma-2-2b-it-q4f32_1-MLC",
+                name: "Gemma 2 2B (고정밀)",
+                desc: "2B 고정밀 버전 · ~2.5GB · 더 정확한 응답",
+                badge: "정밀",
+                badgeClass: "badge-smart"
+            },
+            {
+                id: "gemma-2-9b-it-q4f16_1-MLC",
+                name: "Gemma 2 9B",
+                desc: "가장 똑똑함 · ~5.5GB · 고사양 기기 필요",
+                badge: "똑똑",
+                badgeClass: "badge-smart"
+            }
+        ];
+
+        let currentModelId = localStorage.getItem('selectedModel') || MODELS[0].id;
+        let pendingModelId = null;
 
         // Auto-resize textarea
         messageInput.addEventListener('input', () => {
@@ -283,6 +398,65 @@
             if (engine) {
                 engine.resetChat();
             }
+        };
+
+        window.openModelSelector = function() {
+            pendingModelId = null;
+            const modelList = document.getElementById('modelList');
+            const confirmBtn = document.getElementById('modelConfirmBtn');
+            confirmBtn.disabled = true;
+
+            modelList.innerHTML = MODELS.map(m => {
+                const isCurrent = m.id === currentModelId;
+                return `
+                    <div class="model-option ${isCurrent ? 'selected active' : ''}"
+                         data-model-id="${m.id}"
+                         onclick="selectModel('${m.id}')">
+                        <div class="model-radio"></div>
+                        <div class="model-info">
+                            <div class="model-name">${m.name}</div>
+                            <div class="model-desc">${m.desc}</div>
+                        </div>
+                        ${isCurrent
+                            ? '<span class="model-badge badge-current">사용 중</span>'
+                            : `<span class="model-badge ${m.badgeClass}">${m.badge}</span>`}
+                    </div>`;
+            }).join('');
+
+            document.getElementById('modelModal').classList.add('open');
+        };
+
+        window.selectModel = function(modelId) {
+            if (modelId === currentModelId) return;
+            pendingModelId = modelId;
+            document.querySelectorAll('.model-option').forEach(el => {
+                el.classList.toggle('selected', el.dataset.modelId === modelId);
+            });
+            document.getElementById('modelConfirmBtn').disabled = false;
+        };
+
+        window.closeModelSelector = function() {
+            document.getElementById('modelModal').classList.remove('open');
+            pendingModelId = null;
+        };
+
+        window.confirmModelChange = async function() {
+            if (!pendingModelId || pendingModelId === currentModelId) return;
+            currentModelId = pendingModelId;
+            localStorage.setItem('selectedModel', currentModelId);
+            closeModelSelector();
+
+            // Reset state
+            conversationHistory = [];
+            chatArea.innerHTML = '';
+            messageInput.disabled = true;
+            sendBtn.disabled = true;
+
+            if (engine) {
+                engine = null;
+            }
+
+            initEngine();
         };
 
         function addMessage(text, isUser) {
@@ -369,19 +543,30 @@
             messageInput.focus();
         }
 
+        function getModelInfo(modelId) {
+            return MODELS.find(m => m.id === modelId) || MODELS[0];
+        }
+
         async function initEngine() {
             if (!navigator.gpu) {
                 statusBanner.classList.add('error');
+                statusBanner.classList.remove('hidden');
                 statusText.innerHTML = '이 브라우저에서 WebGPU를 지원하지 않습니다.<br><b>Chrome 121 이상</b>에서 열어주세요.';
                 progressFill.style.width = '0%';
                 headerStatus.innerHTML = '<span class="status-dot error"></span>WebGPU 미지원';
                 return;
             }
 
-            try {
-                statusText.textContent = 'Gemma 2 2B 모델을 다운로드하고 있습니다... (최초 1회, 약 1.5GB)';
+            const modelInfo = getModelInfo(currentModelId);
 
-                engine = await webllm.CreateMLCEngine(MODEL_ID, {
+            statusBanner.classList.remove('hidden', 'error');
+            progressFill.style.width = '0%';
+            headerStatus.innerHTML = `<span class="status-dot loading"></span>${modelInfo.name} 로딩 중...`;
+
+            try {
+                statusText.textContent = `${modelInfo.name} 모델을 다운로드하고 있습니다... (최초 1회)`;
+
+                engine = await webllm.CreateMLCEngine(currentModelId, {
                     initProgressCallback: (report) => {
                         const pct = Math.round(report.progress * 100);
                         progressFill.style.width = pct + '%';
@@ -390,12 +575,13 @@
                 });
 
                 statusBanner.classList.add('hidden');
-                headerStatus.innerHTML = '<span class="status-dot ready"></span>온라인 (WebGPU)';
+                headerStatus.innerHTML = `<span class="status-dot ready"></span>${modelInfo.name} (WebGPU)`;
                 messageInput.disabled = false;
                 messageInput.focus();
 
             } catch (err) {
                 console.error('Init error:', err);
+                statusBanner.classList.remove('hidden');
                 statusBanner.classList.add('error');
                 statusText.textContent = `모델 로드 실패: ${err.message}`;
                 headerStatus.innerHTML = '<span class="status-dot error"></span>오류 발생';
