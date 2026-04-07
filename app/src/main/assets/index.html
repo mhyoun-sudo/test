@@ -65,9 +65,7 @@
         }
 
         .header-info h1 { font-size: 18px; font-weight: 600; }
-
         .header-status { font-size: 12px; opacity: 0.9; }
-
         .header-actions { margin-left: auto; display: flex; gap: 6px; }
 
         .header-btn {
@@ -76,12 +74,9 @@
             padding: 8px 12px; border-radius: 8px;
             font-size: 13px; cursor: pointer;
         }
-
         .header-btn:active { background: rgba(255,255,255,0.3); }
 
-        .header-actions { display: flex; gap: 6px; }
-
-        /* Model Selector Modal */
+        /* Modal */
         .modal-overlay {
             display: none; position: fixed; inset: 0;
             background: rgba(0,0,0,0.5); z-index: 100;
@@ -92,9 +87,10 @@
 
         .modal {
             background: var(--surface); border-radius: 16px;
-            width: 100%; max-width: 400px;
+            width: 100%; max-width: 420px;
             box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-            overflow: hidden;
+            overflow: hidden; max-height: 90vh;
+            display: flex; flex-direction: column;
         }
 
         .modal-header {
@@ -103,44 +99,49 @@
             font-weight: 600; font-size: 17px;
         }
 
-        .modal-body { padding: 12px; }
+        .modal-body { padding: 12px; overflow-y: auto; }
+
+        .model-group-label {
+            font-size: 11px; font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase; letter-spacing: 1px;
+            padding: 8px 16px 4px; margin-top: 4px;
+        }
 
         .model-option {
             display: flex; align-items: center; gap: 12px;
-            padding: 14px 16px; border-radius: 12px;
+            padding: 12px 16px; border-radius: 12px;
             cursor: pointer; border: 2px solid transparent;
             transition: all 0.15s;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
             background: var(--bg);
         }
-        .model-option:last-child { margin-bottom: 0; }
         .model-option:hover { border-color: var(--primary); }
         .model-option.selected { border-color: var(--primary); background: var(--primary-light); }
-        .model-option.active { opacity: 0.6; cursor: default; }
 
         .model-radio {
             width: 20px; height: 20px; border-radius: 50%;
             border: 2px solid var(--text-secondary); flex-shrink: 0;
             display: flex; align-items: center; justify-content: center;
         }
-        .model-option.selected .model-radio {
-            border-color: var(--primary);
-        }
+        .model-option.selected .model-radio { border-color: var(--primary); }
         .model-option.selected .model-radio::after {
             content: ''; width: 10px; height: 10px;
             border-radius: 50%; background: var(--primary);
         }
 
         .model-info { flex: 1; }
-        .model-name { font-weight: 600; font-size: 15px; }
-        .model-desc { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+        .model-name { font-weight: 600; font-size: 14px; }
+        .model-desc { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
         .model-badge {
-            font-size: 11px; padding: 2px 8px;
-            border-radius: 10px; font-weight: 600;
+            font-size: 10px; padding: 2px 8px;
+            border-radius: 10px; font-weight: 600; white-space: nowrap;
         }
+        .badge-light { background: #F3E5F5; color: #7B1FA2; }
         .badge-fast { background: #E8F5E9; color: #2E7D32; }
-        .badge-smart { background: #E3F2FD; color: #1565C0; }
-        .badge-current { background: #FFF3E0; color: #E65100; }
+        .badge-balanced { background: #E3F2FD; color: #1565C0; }
+        .badge-smart { background: #FFF3E0; color: #E65100; }
+        .badge-current { background: #E8F5E9; color: #2E7D32; }
 
         .modal-footer {
             padding: 12px 16px;
@@ -176,7 +177,6 @@
             background: rgba(0,0,0,0.1);
             border-radius: 3px; margin-top: 10px; overflow: hidden;
         }
-
         .progress-fill {
             height: 100%; background: var(--primary);
             border-radius: 3px; transition: width 0.3s ease;
@@ -290,12 +290,11 @@
             </div>
         </div>
         <div class="header-actions">
-            <button class="header-btn" id="modelBtn" onclick="openModelSelector()">모델 변경</button>
+            <button class="header-btn" onclick="openModelSelector()">모델 변경</button>
             <button class="header-btn" onclick="clearChat()">초기화</button>
         </div>
     </div>
 
-    <!-- Model Selector Modal -->
     <div class="modal-overlay" id="modelModal">
         <div class="modal">
             <div class="modal-header">모델 선택</div>
@@ -333,7 +332,13 @@
     </div>
 
     <script type="module">
-        import * as webllm from "https://esm.run/@mlc-ai/web-llm@0.2.78";
+        import {
+            AutoTokenizer,
+            AutoProcessor,
+            Gemma3ForConditionalGeneration,
+            Gemma4ForConditionalGeneration,
+            TextStreamer,
+        } from "https://esm.run/@huggingface/transformers@3.6.0";
 
         const chatArea = document.getElementById('chatArea');
         const messageInput = document.getElementById('messageInput');
@@ -344,35 +349,55 @@
         const headerStatus = document.getElementById('headerStatus');
         const welcome = document.getElementById('welcome');
 
-        let engine = null;
+        let processor = null;
+        let model = null;
         let isGenerating = false;
         let conversationHistory = [];
 
         const MODELS = [
             {
-                id: "gemma-2-2b-it-q4f16_1-MLC",
-                name: "Gemma 2 2B",
-                desc: "가볍고 빠름 · ~1.5GB · 저사양 기기 권장",
-                badge: "빠름",
-                badgeClass: "badge-fast"
+                id: "onnx-community/gemma-3-270m-it-ONNX",
+                name: "Gemma 3 270M",
+                desc: "초경량 · 빠른 응답 · 저사양 기기",
+                badge: "초경량",
+                badgeClass: "badge-light",
+                group: "Gemma 3",
+                genClass: "gemma3"
             },
             {
-                id: "gemma-2-2b-it-q4f32_1-MLC",
-                name: "Gemma 2 2B (고정밀)",
-                desc: "2B 고정밀 버전 · ~2.5GB · 더 정확한 응답",
-                badge: "정밀",
-                badgeClass: "badge-smart"
+                id: "onnx-community/gemma-3-1b-it-ONNX-GQA",
+                name: "Gemma 3 1B",
+                desc: "가벼움 · ~0.7GB · 모바일 권장",
+                badge: "가벼움",
+                badgeClass: "badge-fast",
+                group: "Gemma 3",
+                genClass: "gemma3"
             },
             {
-                id: "gemma-2-9b-it-q4f16_1-MLC",
-                name: "Gemma 2 9B",
-                desc: "가장 똑똑함 · ~5.5GB · 고사양 기기 필요",
-                badge: "똑똑",
-                badgeClass: "badge-smart"
+                id: "onnx-community/gemma-4-E2B-it-ONNX",
+                name: "Gemma 4 E2B",
+                desc: "균형 잡힌 성능 · ~1.5GB · 권장",
+                badge: "권장",
+                badgeClass: "badge-balanced",
+                group: "Gemma 4",
+                genClass: "gemma4"
+            },
+            {
+                id: "onnx-community/gemma-4-E4B-it-ONNX",
+                name: "Gemma 4 E4B",
+                desc: "가장 똑똑함 · ~3GB · 고사양 기기",
+                badge: "고성능",
+                badgeClass: "badge-smart",
+                group: "Gemma 4",
+                genClass: "gemma4"
             }
         ];
 
-        let currentModelId = localStorage.getItem('selectedModel') || MODELS[0].id;
+        let currentModelId = localStorage.getItem('selectedModel') || MODELS[2].id;
+        // Validate stored model ID
+        if (!MODELS.find(m => m.id === currentModelId)) {
+            currentModelId = MODELS[2].id;
+        }
         let pendingModelId = null;
 
         // Auto-resize textarea
@@ -382,7 +407,6 @@
             sendBtn.disabled = !messageInput.value.trim() || isGenerating;
         });
 
-        // Enter to send (shift+enter for newline)
         messageInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -395,9 +419,6 @@
         window.clearChat = function() {
             conversationHistory = [];
             chatArea.innerHTML = '';
-            if (engine) {
-                engine.resetChat();
-            }
         };
 
         window.openModelSelector = function() {
@@ -406,10 +427,16 @@
             const confirmBtn = document.getElementById('modelConfirmBtn');
             confirmBtn.disabled = true;
 
-            modelList.innerHTML = MODELS.map(m => {
+            let html = '';
+            let lastGroup = '';
+            MODELS.forEach(m => {
+                if (m.group !== lastGroup) {
+                    html += `<div class="model-group-label">${m.group}</div>`;
+                    lastGroup = m.group;
+                }
                 const isCurrent = m.id === currentModelId;
-                return `
-                    <div class="model-option ${isCurrent ? 'selected active' : ''}"
+                html += `
+                    <div class="model-option ${isCurrent ? 'selected' : ''}"
                          data-model-id="${m.id}"
                          onclick="selectModel('${m.id}')">
                         <div class="model-radio"></div>
@@ -421,8 +448,8 @@
                             ? '<span class="model-badge badge-current">사용 중</span>'
                             : `<span class="model-badge ${m.badgeClass}">${m.badge}</span>`}
                     </div>`;
-            }).join('');
-
+            });
+            modelList.innerHTML = html;
             document.getElementById('modelModal').classList.add('open');
         };
 
@@ -446,18 +473,20 @@
             localStorage.setItem('selectedModel', currentModelId);
             closeModelSelector();
 
-            // Reset state
             conversationHistory = [];
             chatArea.innerHTML = '';
             messageInput.disabled = true;
             sendBtn.disabled = true;
 
-            if (engine) {
-                engine = null;
-            }
+            model = null;
+            processor = null;
 
-            initEngine();
+            initModel();
         };
+
+        function getModelInfo(modelId) {
+            return MODELS.find(m => m.id === modelId) || MODELS[2];
+        }
 
         function addMessage(text, isUser) {
             if (welcome) welcome.style.display = 'none';
@@ -497,9 +526,16 @@
             return el.innerHTML;
         }
 
+        function buildChatMessages(history) {
+            return history.map(msg => ({
+                role: msg.role,
+                content: [{ type: "text", text: msg.content }]
+            }));
+        }
+
         async function sendMessage() {
             const text = messageInput.value.trim();
-            if (!text || isGenerating || !engine) return;
+            if (!text || isGenerating || !model || !processor) return;
 
             messageInput.value = '';
             messageInput.style.height = 'auto';
@@ -513,18 +549,29 @@
             let fullResponse = '';
 
             try {
-                const chunks = await engine.chat.completions.create({
-                    messages: conversationHistory,
-                    stream: true,
-                    max_tokens: 1024,
-                    temperature: 0.7,
+                const messages = buildChatMessages(conversationHistory);
+                const inputs = await processor.apply_chat_template(messages, {
+                    tokenize: true,
+                    return_dict: true,
+                    add_generation_prompt: true,
                 });
 
-                for await (const chunk of chunks) {
-                    const delta = chunk.choices[0]?.delta?.content || '';
-                    fullResponse += delta;
-                    updateStreamingMessage(botDiv, fullResponse);
-                }
+                const streamer = new TextStreamer(processor.tokenizer, {
+                    skip_prompt: true,
+                    skip_special_tokens: true,
+                    callback_function: (text) => {
+                        fullResponse += text;
+                        updateStreamingMessage(botDiv, fullResponse);
+                    },
+                });
+
+                await model.generate({
+                    ...inputs,
+                    max_new_tokens: 1024,
+                    temperature: 0.7,
+                    do_sample: true,
+                    streamer,
+                });
 
                 if (!fullResponse.trim()) {
                     fullResponse = '(응답 없음)';
@@ -543,11 +590,7 @@
             messageInput.focus();
         }
 
-        function getModelInfo(modelId) {
-            return MODELS.find(m => m.id === modelId) || MODELS[0];
-        }
-
-        async function initEngine() {
+        async function initModel() {
             if (!navigator.gpu) {
                 statusBanner.classList.add('error');
                 statusBanner.classList.remove('hidden');
@@ -562,16 +605,34 @@
             statusBanner.classList.remove('hidden', 'error');
             progressFill.style.width = '0%';
             headerStatus.innerHTML = `<span class="status-dot loading"></span>${modelInfo.name} 로딩 중...`;
+            statusText.textContent = `${modelInfo.name} 모델을 다운로드하고 있습니다... (최초 1회)`;
 
             try {
-                statusText.textContent = `${modelInfo.name} 모델을 다운로드하고 있습니다... (최초 1회)`;
-
-                engine = await webllm.CreateMLCEngine(currentModelId, {
-                    initProgressCallback: (report) => {
-                        const pct = Math.round(report.progress * 100);
+                const progressCallback = (progress) => {
+                    if (progress.status === 'progress' && progress.total) {
+                        const pct = Math.round((progress.loaded / progress.total) * 100);
                         progressFill.style.width = pct + '%';
-                        statusText.textContent = report.text || `로딩 중... ${pct}%`;
+                        const mbLoaded = (progress.loaded / 1024 / 1024).toFixed(0);
+                        const mbTotal = (progress.total / 1024 / 1024).toFixed(0);
+                        statusText.textContent = `${modelInfo.name} 다운로드 중... ${mbLoaded}MB / ${mbTotal}MB (${pct}%)`;
+                    } else if (progress.status === 'ready') {
+                        statusText.textContent = '모델 초기화 중...';
+                        progressFill.style.width = '100%';
                     }
+                };
+
+                const ModelClass = modelInfo.genClass === 'gemma4'
+                    ? Gemma4ForConditionalGeneration
+                    : Gemma3ForConditionalGeneration;
+
+                processor = await AutoProcessor.from_pretrained(currentModelId, {
+                    progress_callback: progressCallback,
+                });
+
+                model = await ModelClass.from_pretrained(currentModelId, {
+                    dtype: "q4f16",
+                    device: "webgpu",
+                    progress_callback: progressCallback,
                 });
 
                 statusBanner.classList.add('hidden');
@@ -588,7 +649,7 @@
             }
         }
 
-        initEngine();
+        initModel();
     </script>
 </body>
 </html>
