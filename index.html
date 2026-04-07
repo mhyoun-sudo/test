@@ -286,7 +286,7 @@
         <div class="header-info">
             <h1>Gemma 챗봇</h1>
             <div class="header-status" id="headerStatus">
-                <span class="status-dot loading"></span>초기화 중...
+                <span class="status-dot error"></span>모델을 선택해주세요
             </div>
         </div>
         <div class="header-actions">
@@ -306,8 +306,8 @@
         </div>
     </div>
 
-    <div class="status-banner" id="statusBanner">
-        <div class="status-text" id="statusText">WebGPU를 확인하고 모델을 준비합니다...</div>
+    <div class="status-banner hidden" id="statusBanner">
+        <div class="status-text" id="statusText"></div>
         <div class="progress-bar">
             <div class="progress-fill" id="progressFill" style="width: 0%"></div>
         </div>
@@ -318,7 +318,8 @@
             <div class="welcome-icon">🤖</div>
             <h2>Gemma 챗봇</h2>
             <p>WebGPU로 기기에서 직접 실행되는 AI 챗봇입니다.<br>
-            모델 로딩이 완료되면 대화를 시작할 수 있습니다.</p>
+            아래에서 모델을 선택하면 다운로드가 시작됩니다.</p>
+            <div id="modelSelectCards" style="margin-top: 20px; text-align: left;"></div>
         </div>
     </div>
 
@@ -393,12 +394,12 @@
             }
         ];
 
-        let currentModelId = localStorage.getItem('selectedModel') || MODELS[2].id;
-        // Validate stored model ID
-        if (!MODELS.find(m => m.id === currentModelId)) {
-            currentModelId = MODELS[2].id;
+        let currentModelId = localStorage.getItem('selectedModel') || null;
+        if (currentModelId && !MODELS.find(m => m.id === currentModelId)) {
+            currentModelId = null;
         }
         let pendingModelId = null;
+        let modelLoaded = false;
 
         // Auto-resize textarea
         messageInput.addEventListener('input', () => {
@@ -485,7 +486,7 @@
         };
 
         function getModelInfo(modelId) {
-            return MODELS.find(m => m.id === modelId) || MODELS[2];
+            return MODELS.find(m => m.id === modelId) || MODELS[0];
         }
 
         function addMessage(text, isUser) {
@@ -649,7 +650,44 @@
             }
         }
 
-        initModel();
+        // Pick model from welcome screen
+        window.selectAndLoad = function(modelId) {
+            currentModelId = modelId;
+            localStorage.setItem('selectedModel', currentModelId);
+            if (welcome) welcome.style.display = 'none';
+            initModel();
+        };
+
+        function renderInitialCards() {
+            const container = document.getElementById('modelSelectCards');
+            if (!container) return;
+
+            let html = '';
+            let lastGroup = '';
+            MODELS.forEach(m => {
+                if (m.group !== lastGroup) {
+                    html += `<div class="model-group-label">${m.group}</div>`;
+                    lastGroup = m.group;
+                }
+                html += `
+                    <div class="model-option" onclick="selectAndLoad('${m.id}')" style="cursor:pointer">
+                        <div class="model-info">
+                            <div class="model-name">${m.name}</div>
+                            <div class="model-desc">${m.desc}</div>
+                        </div>
+                        <span class="model-badge ${m.badgeClass}">${m.badge}</span>
+                    </div>`;
+            });
+            container.innerHTML = html;
+        }
+
+        // If a model was previously selected, load it; otherwise show selection
+        if (currentModelId) {
+            if (welcome) welcome.style.display = 'none';
+            initModel();
+        } else {
+            renderInitialCards();
+        }
     </script>
 </body>
 </html>
